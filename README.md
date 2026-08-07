@@ -47,8 +47,13 @@ No Python packages are required.
 python tak_triangle_demo.py
 ```
 
-The script sends the same polygon every two seconds until the program is closed.
-Use `Ctrl+C` to stop it from a terminal.
+The script sends the polygon for `STALE_SECONDS`, then sends TAK force-delete
+messages for the drawing UID. This is intentional: some TAK drawing objects can
+remain visible after their CoT `stale` time, so the demo does not rely on stale
+cleanup alone.
+
+Use `Ctrl+C` to stop it from a terminal. On normal interruption, the script still
+tries to send the force-delete message before exiting.
 
 ## Change The Test Values
 
@@ -60,9 +65,37 @@ LON = -77.0353
 BEARING_DEG = 45.0
 DEGREES_OF_INACCURACY = 45.0
 LINEAR_ERROR_KM = 15.0
+STALE_SECONDS = 10.0
 ```
 
 By default, the origin is near the White House.
+
+## Expiration And Delete
+
+The drawing CoT includes a normal `stale` timestamp. When that time is reached,
+the script sends a `t-x-d-d` event with:
+
+```xml
+<detail>
+  <link uid="drawing-uid" type="none" relation="none" />
+  <__forcedelete />
+</detail>
+```
+
+That explicit delete is the important part for making WinTAK remove freehand
+drawings reliably.
+
+## 3D Display
+
+The polygon vertex links intentionally use `lat,lon` instead of `lat,lon,0`.
+Using `0` as the height means 0 meters height-above-ellipsoid, which can put the
+shape under the terrain in WinTAK 3D. The demo also includes best-effort clamp
+hints in the detail block:
+
+```xml
+<altitudeMode>clampToGround</altitudeMode>
+<heightStyle value="clampToGround" />
+```
 
 ## Colors
 

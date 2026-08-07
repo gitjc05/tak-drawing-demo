@@ -21,6 +21,9 @@ LINEAR_ERROR_KM = 15.0
 HOST = "127.0.0.1"
 PORT = 4242
 SEND_INTERVAL_SECONDS = 2.0
+STALE_SECONDS = 10.0
+DELETE_REPEAT_COUNT = 5
+DELETE_INTERVAL_SECONDS = 0.25
 CALLSIGN = "TAK-BEARING-DEMO"
 
 # TAK colors are signed 32-bit ARGB integers: alpha, red, green, blue.
@@ -57,9 +60,12 @@ def destination_point(lat_deg, lon_deg, bearing_deg, distance_km):
     return math.degrees(lat2), lon2
 
 
-def make_triangle_cot(
-    lat, lon, bearing_deg, degrees_of_inaccuracy, linear_error_km, uid
-):
+def send_cot(cot):
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+        sock.sendto(cot, (HOST, PORT))
+
+
+def make_triangle_cot(lat, lon, bearing_deg, degrees_of_inaccuracy, linear_error_km, uid, stale_at):
     left = destination_point(
         lat, lon, bearing_deg - degrees_of_inaccuracy, linear_error_km
     )
@@ -78,7 +84,7 @@ def make_triangle_cot(
             "how": "h-e",
             "time": cot_time(now),
             "start": cot_time(now),
-            "stale": cot_time(now + timedelta(seconds=5)),
+            "stale": cot_time(stale_at),
         },
     )
     ET.SubElement(
@@ -92,30 +98,69 @@ def make_triangle_cot(
     ET.SubElement(detail, "strokeColor", {"value": str(STROKE_COLOR)})
     ET.SubElement(detail, "strokeWeight", {"value": "4"})
     ET.SubElement(detail, "fillColor", {"value": str(FILL_COLOR)})
+    ET.SubElement(detail, "altitudeMode").text = "clampToGround"
+    ET.SubElement(detail, "heightStyle", {"value": "clampToGround"})
 
     for point_lat, point_lon in vertices:
-        ET.SubElement(detail, "link", {"point": f"{point_lat:.7f},{point_lon:.7f},0"})
+        ET.SubElement(detail, "link", {"point": f"{point_lat:.7f},{point_lon:.7f}"})
 
     return ET.tostring(event, encoding="utf-8")
 
 
+def make_delete_cot(uid, lat, lon):
+    now = datetime.now(timezone.utc)
+    event = ET.Element(
+        "event",
+        {
+            "version": "2.0",
+            "uid": uid,
+            "type": "t-x-d-d",
+            "how": "m-g",
+            "time": cot_time(now),
+            "start": cot_time(now),
+            "stale": cot_time(now + timedelta(seconds=STALE_SECONDS)),
+        },
+    )
+    ET.SubElement(
+        event,
+        "point",
+        {"lat": f"{lat:.7f}", "lon": f"{lon:.7f}", "hae": "0", "ce": "10", "le": "10"},
+    )
+    detail = ET.SubElement(event, "detail")
+    ET.SubElement(detail, "link", {"uid": uid, "type": "none", "relation": "none"})
+    ET.SubElement(detail, "__forcedelete")
+    return ET.tostring(event, encoding="utf-8")
+
+
+def force_delete(uid):
+    delete_cot = make_delete_cot(uid, LAT, LON)
+    for _ in range(DELETE_REPEAT_COUNT):
+        send_cot(delete_cot)
+        print(f"Sent delete for {uid}")
+        time.sleep(DELETE_INTERVAL_SECONDS)
+
+
 def main():
     uid = f"tak-triangle-{uuid.uuid4()}"
+    stale_at = datetime.now(timezone.utc) + timedelta(seconds=STALE_SECONDS)
+    stop_sending_at = time.monotonic() + STALE_SECONDS
 
-    while True:
-        cot = make_triangle_cot(
-            LAT,
-            LON,
-            BEARING_DEG,
-            DEGREES_OF_INACCURACY,
-            LINEAR_ERROR_KM,
-            uid,
-        )
-        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
-            sock.sendto(cot, (HOST, PORT))
-
-        print(f"Sent {len(cot)} bytes to udp://{HOST}:{PORT}")
-        time.sleep(SEND_INTERVAL_SECONDS)
+    try:
+        while time.monotonic() < stop_sending_at:
+            cot = make_triangle_cot(
+                LAT,
+                LON,
+                BEARING_DEG,
+                DEGREES_OF_INACCURACY,
+                LINEAR_ERROR_KM,
+                uid,
+                stale_at,
+            )
+            send_cot(cot)
+            print(f"Sent drawing. It will be force-deleted at {cot_time(stale_at)}")
+            time.sleep(SEND_INTERVAL_SECONDS)
+    finally:
+        force_delete(uid)
 
 
 if __name__ == "__main__":
