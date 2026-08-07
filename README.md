@@ -13,13 +13,13 @@ TAK map.
 
 ## What It Sends
 
-The script sends a CoT `b-m-p-s-p-i` shape event to:
+The script sends one CoT `u-d-p` polygon event to:
 
 ```text
 udp://127.0.0.1:4242
 ```
 
-The polygon vertices are encoded in `detail/shape/polyline`:
+The polygon vertices are encoded as a drawn-shape polyline:
 
 ```xml
 <detail>
@@ -28,13 +28,12 @@ The polygon vertices are encoded in `detail/shape/polyline`:
       <vertex lat="..." lon="..." />
       <vertex lat="..." lon="..." />
       <vertex lat="..." lon="..." />
-      <vertex lat="..." lon="..." />
     </polyline>
   </shape>
 </detail>
 ```
 
-The first point is repeated as the final point so TAK renders the shape as a
+The polyline is marked `closed="true"` so TAK renders the three vertices as a
 closed polygon.
 
 ## Requirements
@@ -51,9 +50,9 @@ No Python packages are required.
 python tak_triangle_demo.py
 ```
 
-The script sends the polygon until its fixed `STALE_SECONDS` deadline, then
-stops sending. Because this is a normal CoT shape item rather than a WinTAK
-freehand drawing object, WinTAK should remove it when its stale time passes.
+The script sends one polygon message and exits. WinTAK removes the polygon after
+its `stale` time passes, though the WinTAK stale sweeper may take several extra
+seconds to remove it from the map and state database.
 
 ## Change The Test Values
 
@@ -72,13 +71,13 @@ By default, the origin is near the White House.
 
 ## Expiration
 
-The shape CoT includes a fixed `stale` timestamp:
+The polygon CoT includes a fixed `stale` timestamp:
 
 ```xml
-<event uid="TAK-BEARING-DEMO-TRIANGLE" type="b-m-p-s-p-i" stale="..." />
+<event uid="TAK-BEARING-DEMO" type="u-d-p" stale="..." />
 ```
 
-The fixed `DRAWING_UID` is important because repeated sends update the same map
+The fixed `DRAWING_UID` is important because repeated demos update the same map
 item instead of creating duplicates.
 
 ## 3D Display
@@ -108,14 +107,24 @@ STROKE_COLOR = tak_color(alpha=255, red=255, green=0, blue=0)
 FILL_COLOR = tak_color(alpha=64, red=255, green=0, blue=0)
 ```
 
-The shape also includes a KML style block because some WinTAK shape rendering
-paths use KML color values instead of the signed TAK integers. KML colors are
-hex strings in `alpha, blue, green, red` order:
+The CoT also includes KML-style red and ABGR-style red in the `shape/polyline`
+attributes, because WinTAK's shape renderer can prefer one style path over
+another. The generic CoT point color uses normal ARGB red, while the polyline
+attributes use the integer byte layout that maps to red when parsed as ABGR:
 
-```python
-STROKE_KML_COLOR = kml_color(alpha=255, red=255, green=0, blue=0)
-FILL_KML_COLOR = kml_color(alpha=64, red=255, green=0, blue=0)
+```xml
+<polyline color="-16776961" strokeColor="-16776961" fillColor="1073742079" />
+<LineStyle>
+  <color>ff0000ff</color>
+  <width>6</width>
+</LineStyle>
+<PolyStyle>
+  <color>400000ff</color>
+</PolyStyle>
 ```
+
+On WinTAK 4.1, the origin/control point may honor the red color while the
+polygon stroke can still render white due to the built-in `u-d-p` style path.
 
 Alpha controls opacity:
 
