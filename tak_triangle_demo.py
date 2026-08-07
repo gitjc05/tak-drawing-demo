@@ -21,8 +21,6 @@ HOST = "127.0.0.1"
 PORT = 4242
 SEND_INTERVAL_SECONDS = 2.0
 STALE_SECONDS = 10.0
-REMOVE_REPEAT_COUNT = 5
-REMOVE_INTERVAL_SECONDS = 0.25
 CALLSIGN = "TAK-BEARING-DEMO"
 DRAWING_UID = "TAK-BEARING-DEMO-TRIANGLE"
 
@@ -80,7 +78,7 @@ def make_triangle_cot(lat, lon, bearing_deg, degrees_of_inaccuracy, linear_error
         {
             "version": "2.0",
             "uid": uid,
-            "type": "u-d-f",
+            "type": "b-m-p-s-p-i",
             "how": "h-e",
             "time": cot_time(now),
             "start": cot_time(now),
@@ -101,46 +99,20 @@ def make_triangle_cot(lat, lon, bearing_deg, degrees_of_inaccuracy, linear_error
     ET.SubElement(detail, "altitudeMode").text = "clampToGround"
     ET.SubElement(detail, "heightStyle", {"value": "clampToGround"})
 
-    for point_lat, point_lon in vertices:
-        ET.SubElement(detail, "link", {"point": f"{point_lat:.7f},{point_lon:.7f}"})
-
-    return ET.tostring(event, encoding="utf-8")
-
-
-def make_empty_drawing_cot(uid, lat, lon):
-    now = datetime.now(timezone.utc)
-    event = ET.Element(
-        "event",
+    shape = ET.SubElement(detail, "shape")
+    polyline = ET.SubElement(
+        shape,
+        "polyline",
         {
-            "version": "2.0",
-            "uid": uid,
-            "type": "u-d-f",
-            "how": "h-e",
-            "time": cot_time(now),
-            "start": cot_time(now),
-            "stale": cot_time(now + timedelta(seconds=1)),
+            "closed": "true",
+            "color": str(STROKE_COLOR),
+            "fillColor": str(FILL_COLOR),
         },
     )
-    ET.SubElement(
-        event,
-        "point",
-        {"lat": f"{lat:.7f}", "lon": f"{lon:.7f}", "hae": "0", "ce": "10", "le": "10"},
-    )
-    detail = ET.SubElement(event, "detail")
-    ET.SubElement(detail, "contact", {"callsign": CALLSIGN})
-    ET.SubElement(detail, "strokeColor", {"value": str(tak_color(0, 0, 0, 0))})
-    ET.SubElement(detail, "strokeWeight", {"value": "0"})
-    ET.SubElement(detail, "fillColor", {"value": str(tak_color(0, 0, 0, 0))})
-    ET.SubElement(detail, "__shapeExtras", {"cpvis": "false", "editable": "false"})
+    for point_lat, point_lon in vertices:
+        ET.SubElement(polyline, "vertex", {"lat": f"{point_lat:.7f}", "lon": f"{point_lon:.7f}"})
+
     return ET.tostring(event, encoding="utf-8")
-
-
-def remove_drawing(uid):
-    for _ in range(REMOVE_REPEAT_COUNT):
-        cot = make_empty_drawing_cot(uid, LAT, LON)
-        send_cot(cot)
-        print(f"Sent empty drawing update for {uid}")
-        time.sleep(REMOVE_INTERVAL_SECONDS)
 
 
 def main():
@@ -148,22 +120,19 @@ def main():
     stale_at = datetime.now(timezone.utc) + timedelta(seconds=STALE_SECONDS)
     stop_sending_at = time.monotonic() + STALE_SECONDS
 
-    try:
-        while time.monotonic() < stop_sending_at:
-            cot = make_triangle_cot(
-                LAT,
-                LON,
-                BEARING_DEG,
-                DEGREES_OF_INACCURACY,
-                LINEAR_ERROR_KM,
-                uid,
-                stale_at,
-            )
-            send_cot(cot)
-            print(f"Sent drawing. It will be removed at {cot_time(stale_at)}")
-            time.sleep(SEND_INTERVAL_SECONDS)
-    finally:
-        remove_drawing(uid)
+    while time.monotonic() < stop_sending_at:
+        cot = make_triangle_cot(
+            LAT,
+            LON,
+            BEARING_DEG,
+            DEGREES_OF_INACCURACY,
+            LINEAR_ERROR_KM,
+            uid,
+            stale_at,
+        )
+        send_cot(cot)
+        print(f"Sent transient shape. Stale time is {cot_time(stale_at)}")
+        time.sleep(SEND_INTERVAL_SECONDS)
 
 
 if __name__ == "__main__":

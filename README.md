@@ -1,7 +1,7 @@
 # TAK Triangle Drawing Demo
 
-This is a tiny Python demo that sends a Cursor on Target (CoT) polygon to a local
-WinTAK client. The polygon is a triangle that starts at a known latitude and
+This is a tiny Python demo that sends a transient Cursor on Target (CoT) polygon
+to a local WinTAK client. The polygon is a triangle that starts at a known latitude and
 longitude, then projects two lines from that point using:
 
 - a bearing in degrees from true north
@@ -13,20 +13,24 @@ TAK map.
 
 ## What It Sends
 
-The script sends a CoT `u-d-f` freehand drawing event to:
+The script sends a CoT `b-m-p-s-p-i` shape event to:
 
 ```text
 udp://127.0.0.1:4242
 ```
 
-The polygon vertices are encoded as direct CoT detail links:
+The polygon vertices are encoded in `detail/shape/polyline`:
 
 ```xml
 <detail>
-  <link point="lat,lon,hae" />
-  <link point="lat,lon,hae" />
-  <link point="lat,lon,hae" />
-  <link point="lat,lon,hae" />
+  <shape>
+    <polyline closed="true">
+      <vertex lat="..." lon="..." />
+      <vertex lat="..." lon="..." />
+      <vertex lat="..." lon="..." />
+      <vertex lat="..." lon="..." />
+    </polyline>
+  </shape>
 </detail>
 ```
 
@@ -47,13 +51,9 @@ No Python packages are required.
 python tak_triangle_demo.py
 ```
 
-The script sends the polygon for `STALE_SECONDS`, then sends an empty drawing
-update for the same drawing UID. This is intentional: WinTAK can treat freehand
-drawings differently from normal map markers, so a separate delete event may
-appear as its own marker instead of removing the drawing.
-
-Use `Ctrl+C` to stop it from a terminal. On normal interruption, the script still
-tries to send the empty drawing update before exiting.
+The script sends the polygon until its fixed `STALE_SECONDS` deadline, then
+stops sending. Because this is a normal CoT shape item rather than a WinTAK
+freehand drawing object, WinTAK should remove it when its stale time passes.
 
 ## Change The Test Values
 
@@ -70,33 +70,22 @@ STALE_SECONDS = 10.0
 
 By default, the origin is near the White House.
 
-## Expiration And Removal
+## Expiration
 
-The drawing CoT includes a normal `stale` timestamp. When that time is reached,
-the script sends another `u-d-f` event with the exact same UID, but no polygon
-vertex links:
+The shape CoT includes a fixed `stale` timestamp:
 
 ```xml
-<event uid="TAK-BEARING-DEMO-TRIANGLE" type="u-d-f" ...>
-  <point lat="38.8895000" lon="-77.0353000" hae="0" ce="10" le="10" />
-  <detail>
-    <contact callsign="TAK-BEARING-DEMO" />
-    <strokeColor value="0" />
-    <strokeWeight value="0" />
-    <fillColor value="0" />
-  </detail>
-</event>
+<event uid="TAK-BEARING-DEMO-TRIANGLE" type="b-m-p-s-p-i" stale="..." />
 ```
 
-The fixed `DRAWING_UID` is important. If every run generated a random UID, later
-runs could not target old drawings for removal.
+The fixed `DRAWING_UID` is important because repeated sends update the same map
+item instead of creating duplicates.
 
 ## 3D Display
 
-The polygon vertex links intentionally use `lat,lon` instead of `lat,lon,0`.
-Using `0` as the height means 0 meters height-above-ellipsoid, which can put the
-shape under the terrain in WinTAK 3D. The demo also includes best-effort clamp
-hints in the detail block:
+The polygon vertices intentionally omit height. Using `0` as height means
+0 meters height-above-ellipsoid, which can put the shape under the terrain in
+WinTAK 3D. The demo also includes best-effort clamp hints in the detail block:
 
 ```xml
 <altitudeMode>clampToGround</altitudeMode>
