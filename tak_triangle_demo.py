@@ -10,6 +10,10 @@ def tak_color(alpha, red, green, blue):
     return value - 2**32 if value >= 2**31 else value
 
 
+def kml_color(alpha, red, green, blue):
+    return f"{alpha:02x}{blue:02x}{green:02x}{red:02x}"
+
+
 # Hardcoded test near the White House.
 LAT = 38.8895
 LON = -77.0353
@@ -27,6 +31,8 @@ DRAWING_UID = "TAK-BEARING-DEMO-TRIANGLE"
 # TAK colors are signed 32-bit ARGB integers: alpha, red, green, blue.
 STROKE_COLOR = tak_color(alpha=255, red=255, green=0, blue=0)  # opaque red
 FILL_COLOR = tak_color(alpha=64, red=255, green=0, blue=0)  # transparent red
+STROKE_KML_COLOR = kml_color(alpha=255, red=255, green=0, blue=0)  # opaque red
+FILL_KML_COLOR = kml_color(alpha=64, red=255, green=0, blue=0)  # transparent red
 
 EARTH_RADIUS_KM = 6371.0088
 
@@ -111,6 +117,18 @@ def make_triangle_cot(lat, lon, bearing_deg, degrees_of_inaccuracy, linear_error
     )
     for point_lat, point_lon in vertices:
         ET.SubElement(polyline, "vertex", {"lat": f"{point_lat:.7f}", "lon": f"{point_lon:.7f}"})
+
+    style_link = ET.SubElement(
+        shape,
+        "link",
+        {"uid": f"{uid}.Style", "type": "b-x-KmlStyle", "relation": "p-c"},
+    )
+    style = ET.SubElement(style_link, "Style")
+    line_style = ET.SubElement(style, "LineStyle")
+    ET.SubElement(line_style, "color").text = STROKE_KML_COLOR
+    ET.SubElement(line_style, "width").text = "5"
+    poly_style = ET.SubElement(style, "PolyStyle")
+    ET.SubElement(poly_style, "color").text = FILL_KML_COLOR
 
     return ET.tostring(event, encoding="utf-8")
 

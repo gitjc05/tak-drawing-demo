@@ -108,6 +108,15 @@ STROKE_COLOR = tak_color(alpha=255, red=255, green=0, blue=0)
 FILL_COLOR = tak_color(alpha=64, red=255, green=0, blue=0)
 ```
 
+The shape also includes a KML style block because some WinTAK shape rendering
+paths use KML color values instead of the signed TAK integers. KML colors are
+hex strings in `alpha, blue, green, red` order:
+
+```python
+STROKE_KML_COLOR = kml_color(alpha=255, red=255, green=0, blue=0)
+FILL_KML_COLOR = kml_color(alpha=64, red=255, green=0, blue=0)
+```
+
 Alpha controls opacity:
 
 - `255` is fully opaque
