@@ -1,7 +1,6 @@
 import math
 import socket
 import time
-import uuid
 from datetime import datetime, timedelta, timezone
 from xml.etree import ElementTree as ET
 
@@ -22,9 +21,10 @@ HOST = "127.0.0.1"
 PORT = 4242
 SEND_INTERVAL_SECONDS = 2.0
 STALE_SECONDS = 10.0
-DELETE_REPEAT_COUNT = 5
-DELETE_INTERVAL_SECONDS = 0.25
+REMOVE_REPEAT_COUNT = 5
+REMOVE_INTERVAL_SECONDS = 0.25
 CALLSIGN = "TAK-BEARING-DEMO"
+DRAWING_UID = "TAK-BEARING-DEMO-TRIANGLE"
 
 # TAK colors are signed 32-bit ARGB integers: alpha, red, green, blue.
 STROKE_COLOR = tak_color(alpha=255, red=255, green=0, blue=0)  # opaque red
@@ -107,18 +107,18 @@ def make_triangle_cot(lat, lon, bearing_deg, degrees_of_inaccuracy, linear_error
     return ET.tostring(event, encoding="utf-8")
 
 
-def make_delete_cot(uid, lat, lon):
+def make_empty_drawing_cot(uid, lat, lon):
     now = datetime.now(timezone.utc)
     event = ET.Element(
         "event",
         {
             "version": "2.0",
             "uid": uid,
-            "type": "t-x-d-d",
-            "how": "m-g",
+            "type": "u-d-f",
+            "how": "h-e",
             "time": cot_time(now),
             "start": cot_time(now),
-            "stale": cot_time(now + timedelta(seconds=STALE_SECONDS)),
+            "stale": cot_time(now + timedelta(seconds=1)),
         },
     )
     ET.SubElement(
@@ -127,21 +127,24 @@ def make_delete_cot(uid, lat, lon):
         {"lat": f"{lat:.7f}", "lon": f"{lon:.7f}", "hae": "0", "ce": "10", "le": "10"},
     )
     detail = ET.SubElement(event, "detail")
-    ET.SubElement(detail, "link", {"uid": uid, "type": "none", "relation": "none"})
-    ET.SubElement(detail, "__forcedelete")
+    ET.SubElement(detail, "contact", {"callsign": CALLSIGN})
+    ET.SubElement(detail, "strokeColor", {"value": str(tak_color(0, 0, 0, 0))})
+    ET.SubElement(detail, "strokeWeight", {"value": "0"})
+    ET.SubElement(detail, "fillColor", {"value": str(tak_color(0, 0, 0, 0))})
+    ET.SubElement(detail, "__shapeExtras", {"cpvis": "false", "editable": "false"})
     return ET.tostring(event, encoding="utf-8")
 
 
-def force_delete(uid):
-    delete_cot = make_delete_cot(uid, LAT, LON)
-    for _ in range(DELETE_REPEAT_COUNT):
-        send_cot(delete_cot)
-        print(f"Sent delete for {uid}")
-        time.sleep(DELETE_INTERVAL_SECONDS)
+def remove_drawing(uid):
+    for _ in range(REMOVE_REPEAT_COUNT):
+        cot = make_empty_drawing_cot(uid, LAT, LON)
+        send_cot(cot)
+        print(f"Sent empty drawing update for {uid}")
+        time.sleep(REMOVE_INTERVAL_SECONDS)
 
 
 def main():
-    uid = f"tak-triangle-{uuid.uuid4()}"
+    uid = DRAWING_UID
     stale_at = datetime.now(timezone.utc) + timedelta(seconds=STALE_SECONDS)
     stop_sending_at = time.monotonic() + STALE_SECONDS
 
@@ -157,10 +160,10 @@ def main():
                 stale_at,
             )
             send_cot(cot)
-            print(f"Sent drawing. It will be force-deleted at {cot_time(stale_at)}")
+            print(f"Sent drawing. It will be removed at {cot_time(stale_at)}")
             time.sleep(SEND_INTERVAL_SECONDS)
     finally:
-        force_delete(uid)
+        remove_drawing(uid)
 
 
 if __name__ == "__main__":

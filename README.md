@@ -47,13 +47,13 @@ No Python packages are required.
 python tak_triangle_demo.py
 ```
 
-The script sends the polygon for `STALE_SECONDS`, then sends TAK force-delete
-messages for the drawing UID. This is intentional: some TAK drawing objects can
-remain visible after their CoT `stale` time, so the demo does not rely on stale
-cleanup alone.
+The script sends the polygon for `STALE_SECONDS`, then sends an empty drawing
+update for the same drawing UID. This is intentional: WinTAK can treat freehand
+drawings differently from normal map markers, so a separate delete event may
+appear as its own marker instead of removing the drawing.
 
 Use `Ctrl+C` to stop it from a terminal. On normal interruption, the script still
-tries to send the force-delete message before exiting.
+tries to send the empty drawing update before exiting.
 
 ## Change The Test Values
 
@@ -70,20 +70,26 @@ STALE_SECONDS = 10.0
 
 By default, the origin is near the White House.
 
-## Expiration And Delete
+## Expiration And Removal
 
 The drawing CoT includes a normal `stale` timestamp. When that time is reached,
-the script sends a `t-x-d-d` event with:
+the script sends another `u-d-f` event with the exact same UID, but no polygon
+vertex links:
 
 ```xml
-<detail>
-  <link uid="drawing-uid" type="none" relation="none" />
-  <__forcedelete />
-</detail>
+<event uid="TAK-BEARING-DEMO-TRIANGLE" type="u-d-f" ...>
+  <point lat="38.8895000" lon="-77.0353000" hae="0" ce="10" le="10" />
+  <detail>
+    <contact callsign="TAK-BEARING-DEMO" />
+    <strokeColor value="0" />
+    <strokeWeight value="0" />
+    <fillColor value="0" />
+  </detail>
+</event>
 ```
 
-That explicit delete is the important part for making WinTAK remove freehand
-drawings reliably.
+The fixed `DRAWING_UID` is important. If every run generated a random UID, later
+runs could not target old drawings for removal.
 
 ## 3D Display
 
